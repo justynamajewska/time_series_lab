@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LSTM — jak dziala siec neuronowa na szeregu czasowym</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,-apple-system,sans-serif;font-size:14px;line-height:1.6;background:#f8f8f6;color:#1a1a1a}
+.wrap{max-width:860px;margin:0 auto;padding:2rem 1.5rem}
+h1{font-size:22px;font-weight:600;margin-bottom:4px}
+.subtitle{font-size:14px;color:#666;margin-bottom:2rem}
+.nav{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:1.5rem}
+.nb{padding:7px 14px;font-size:13px;border-radius:8px;border:1px solid #ddd;background:#fff;color:#333;cursor:pointer;transition:.15s}
+.nb.on{background:#185FA5;color:#fff;border-color:#185FA5}
+.nb:hover:not(.on){background:#f0f0f0}
+.progress{display:flex;gap:5px;align-items:center;margin-bottom:1.5rem}
+.dot{width:8px;height:8px;border-radius:50%;background:#ddd;transition:.2s}
+.dot.on{background:#185FA5}
+.pct{font-size:12px;color:#888;margin-left:6px}
+.card{background:#fff;border:1px solid #e8e8e8;border-radius:12px;padding:1.25rem 1.5rem;margin-bottom:12px}
+.lbl{font-size:11px;font-weight:600;color:#888;text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px}
+.sec{font-size:13px;color:#555;line-height:1.65}
+.mono{font-family:ui-monospace,monospace;font-size:12px;background:#f4f4f4;padding:2px 6px;border-radius:4px}
+.tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:4px;font-weight:500}
+.tg{background:#dcfce7;color:#166534}
+.tr{background:#fee2e2;color:#991b1b}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.metric{background:#f8f8f6;border-radius:8px;padding:12px;text-align:center}
+.metric .val{font-size:20px;font-weight:600;margin-top:4px}
+.metric .mlbl{font-size:11px;color:#888}
+.step-row{display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px solid #f0f0f0}
+.step-row:last-child{border-bottom:none}
+.circle{min-width:24px;height:24px;border-radius:50%;background:#185FA5;color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex-shrink:0;margin-top:2px}
+.step-row h4{font-size:13px;font-weight:600;margin-bottom:3px}
+.pricecell{text-align:center;min-width:52px}
+.pricecell .pv{font-size:13px;font-weight:600;padding:6px 4px;border-radius:5px;margin-bottom:2px}
+.pricecell .pd{font-size:10px;color:#888}
+.hl-blue{background:#dbeafe}
+.hl-green{background:#dcfce7}
+.hl-amber{background:#fef3c7}
+.seq-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px}
+.gate-box{border-radius:8px;padding:10px 14px;margin-bottom:8px;font-size:12px}
+.gate-f{background:#fef3c7;border-left:3px solid #f59e0b}
+.gate-i{background:#dbeafe;border-left:3px solid #3b82f6}
+.gate-o{background:#dcfce7;border-left:3px solid #22c55e}
+.gate-box h4{font-size:12px;font-weight:600;margin-bottom:3px}
+.gate-box p{font-size:12px;color:#555;line-height:1.5;margin:0}
+.flow-step{border-radius:10px;padding:12px 14px;margin-bottom:6px;font-size:12px}
+.flow-arrow{text-align:center;font-size:11px;color:#888;margin:2px 0}
+.fs-in{background:#dbeafe}.fs-in h4{color:#1e40af;font-size:12px;font-weight:600;margin-bottom:2px}
+.fs-lstm{background:#dcfce7}.fs-lstm h4{color:#166534;font-size:12px;font-weight:600;margin-bottom:2px}
+.fs-drop{background:#fef3c7}.fs-drop h4{color:#92400e;font-size:12px;font-weight:600;margin-bottom:2px}
+.fs-fc{background:#fee2e2}.fs-fc h4{color:#991b1b;font-size:12px;font-weight:600;margin-bottom:2px}
+.fs-out{background:#f3f4f6}.fs-out h4{color:#374151;font-size:12px;font-weight:600;margin-bottom:2px}
+.loss-wrap{height:100px;background:#f8f8f6;border-radius:8px;overflow:hidden}
+canvas{width:100%;height:100px}
+.border-l-red{border-left:3px solid #ef4444;padding-left:10px;margin-bottom:10px}
+.info-box{background:#f0f6ff;border-left:3px solid #185FA5;border-radius:0 8px 8px 0;padding:10px 14px;margin-bottom:10px;font-size:13px;color:#1e3a5f;line-height:1.6}
+.footer-nav{display:flex;justify-content:space-between;margin-top:1.5rem}
+.fn-btn{padding:8px 20px;font-size:13px;border-radius:8px;border:1px solid #ddd;background:#fff;cursor:pointer}
+.fn-btn:hover{background:#f0f0f0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Siec LSTM na szeregu czasowym EUR/PLN</h1>
+  <p class="subtitle">Od surowych danych do prognozy — krok po kroku</p>
+  <div class="nav" id="nav"></div>
+  <div class="progress" id="prog"></div>
+  <div id="body"></div>
+  <div class="footer-nav">
+    <button class="fn-btn" id="prv">&#8592; Poprzedni</button>
+    <button class="fn-btn" id="nxt">Nastepny &#8594;</button>
+  </div>
+</div>
+
+<script>
+const prices=[4.28,4.29,4.31,4.30,4.28,4.32,4.35,4.33,4.30,4.27];
+const dnames=['Pn','Wt','Sr','Cz','Pt','Pn','Wt','Sr','Cz','Pt'];
+
+function priceRow(hiFrom,hiTo,cls){
+  return '<div style="display:flex;gap:6px;flex-wrap:wrap">'+prices.map((p,i)=>{
+    const c=(i>=hiFrom&&i<=hiTo)?cls:'';
+    return '<div class="pricecell"><div class="pv '+c+'">'+p.toFixed(2)+'</div><div class="pd">'+dnames[i]+'</div></div>';
+  }).join('')+'</div>';
+}
+
+function seqRow(from,to,tgt,cls){
+  let h='<div class="seq-row"><span style="font-size:11px;color:#888;min-width:60px">sekwencja:</span>';
+  for(let i=from;i<=to;i++) h+='<div class="pricecell"><div class="pv '+cls+'">'+prices[i].toFixed(2)+'</div><div class="pd">t-'+(to-i+1)+'</div></div>';
+  h+='<span style="font-size:18px;color:#aaa;padding:0 4px">&#8594;</span>';
+  h+='<div class="pricecell"><div class="pv hl-amber">'+prices[tgt].toFixed(2)+'</div><div class="pd">cel</div></div>';
+  h+='</div>';
+  return h;
+}
+
+const pages=[
+
+{t:'Dane wejsciowe',html:
+'<div class="card"><div class="lbl">Szereg EUR/PLN — jedna obserwacja na dzien roboczy</div>'+priceRow(99,99,'')+
+'<p class="sec" style="margin-top:10px">1515 obserwacji dziennych (2019–2024). Kazda to kurs zamkniecia. LSTM nie przetwarza surowego ciagu liczb — potrzebuje go przeksztalcic w okna czasowe o stalej dlugosci.</p></div>'+
+'<div class="card"><div class="lbl">Dlaczego modelujemy zwroty, nie poziomy kursu</div>'+
+'<p class="sec">Poziomy EUR/PLN sa <span class="tag tr">niestacjonarne I(1)</span> — srednia i wariancja zmieniaja sie w czasie. Siec neuronowa zle sie uczy gdy skala danych jest niestabilna.</p>'+
+'<p class="sec" style="margin-top:8px">Zwroty dzienne <span class="mono">ret(t) = y(t)/y(t-1) - 1</span> sa <span class="tag tg">stacjonarne I(0)</span> — maja stala skale okolo zera. Po prognozie zwrotu rekonstruujemy poziom: <span class="mono">y(t) = y(t-1) x (1 + ret)</span>.</p></div>'+
+'<div class="card"><div class="lbl">Podzial chronologiczny — zasada szeregow czasowych</div>'+
+'<div class="grid2"><div class="metric"><div class="mlbl">zbior treningowy</div><div class="val">1263 obs.</div><div class="mlbl">2019–2023</div></div>'+
+'<div class="metric"><div class="mlbl">zbior testowy</div><div class="val">252 obs.</div><div class="mlbl">rok 2024</div></div></div>'+
+'<p class="sec" style="margin-top:10px">Podzial musi byc chronologiczny. Losowy podzial oznaczalby ze model widzi przyszlosc podczas treningu — to data leakage.</p></div>'
+},
+
+{t:'Tworzenie sekwencji',html:
+'<div class="card"><div class="lbl">make_sequences(data, seq_len=4) — zasada okna przesuwanego</div>'+
+priceRow(0,3,'hl-blue')+
+'<p class="sec" style="margin-top:10px;margin-bottom:12px">Okno dlugosci SEQ_LEN=4 (w notebooku SEQ_LEN=30 dni roboczych = ok. 6 tygodni). Bierze N kolejnych wartosci jako wejscie i nastepna jako cel. Przesuwa sie o 1 dzien.</p>'+
+seqRow(0,3,4,'hl-blue')+seqRow(1,4,5,'hl-green')+seqRow(2,5,6,'hl-amber')+
+'<p class="sec" style="margin-top:10px">Z 1515 obserwacji i SEQ_LEN=30 powstaje <strong>~1485 przykladow uczacych</strong>.</p></div>'+
+'<div class="card"><div class="lbl">Ksztalt danych po przeksztalceniu</div>'+
+'<div class="grid3"><div class="metric"><div class="mlbl">przykladow</div><div class="val">1485</div></div>'+
+'<div class="metric"><div class="mlbl">dlugosc okna</div><div class="val">30</div></div>'+
+'<div class="metric"><div class="mlbl">liczba cech</div><div class="val">1</div></div></div>'+
+'<p class="sec" style="margin-top:10px">Macierz X ma ksztalt <span class="mono">(1485, 30, 1)</span> — liczba przykladow x dlugosc okna x liczba cech wejsciowych. Trzeci wymiar to 1 bo modelujemy jedna zmienna (zwrot kursu).</p></div>'
+},
+
+{t:'Normalizacja',html:
+'<div class="card"><div class="lbl">Czym jest gradient i dlaczego normalizacja ma znaczenie</div>'+
+'<p class="sec">Gradient to informacja obliczana podczas treningu, ktora mowi jak bardzo i w ktora strone zmienic kazda wage modelu. Matematycznie jest to pochodna funkcji straty wzgledem wagi — jesli gradient jest duzy i dodatni, wage trzeba zmniejszyc; jesli ujemny, zwiekszyc.</p>'+
+'<p class="sec" style="margin-top:8px">Gdy cechy wejsciowe sa w roznych skalach — np. kurs ~4.30 i zmiennosc ~0.002 — gradienty dla tych cech sa bardzo roznej wielkosci. Podczas backpropagation gradienty sa mnozene przez wagi kolejnych warstw: mala wartosc pomnozena wielokrotnie daje wartosc bliska zeru, duza wartosc pomnozena wielokrotnie moze eksplodowac. W efekcie jedna czesc sieci uczy sie bardzo wolno, inna chaotycznie. Normalizacja Z-score eliminuje ten problem sprowadzajac wszystkie wartosci do skali okolo zera z odchyleniem 1.</p></div>'+
+'<div class="card"><div class="lbl">Kluczowa zasada — tylko dane treningowe</div>'+
+'<div class="info-box"><strong>mu i sigma obliczamy wylacznie na danych treningowych.</strong> Nastepnie te same wartosci aplikujemy do zbioru testowego. Gdybysmy uzyli calego zbioru (trening + test) — model wiedzialby o przyszlej sredniej i zmiennosci. To <span class="tag tr">data leakage</span>.</div>'+
+'<p class="sec">Po denormalizacji prognozy: <span class="mono">ret = x_norm x sigma + mu</span>. Nastepnie rekonstrukcja poziomu przez <span class="mono">np.cumprod(1 + ret)</span>.</p></div>'+
+'<div class="card"><div class="lbl">Przyklad liczbowy dla zwrotow EUR/PLN</div>'+
+'<div class="grid3"><div class="metric"><div class="mlbl">zwrot surowy</div><div class="val">+0.0023</div></div>'+
+'<div class="metric"><div class="mlbl">mu (trening)</div><div class="val">+0.00003</div></div>'+
+'<div class="metric"><div class="mlbl">x_norm</div><div class="val" style="color:#185FA5">+0.47</div></div></div></div>'
+},
+
+{t:'Bramki LSTM',html:
+'<div class="card"><div class="lbl">Problem zwyklych sieci rekurencyjnych (RNN)</div>'+
+'<p class="sec">Zwykla RNN mnozy gradienty przez macierz wag przy kazdym kroku czasowym. Po 30 mnozeniach gradienty albo eksploduja (wartosci ogromne) albo zanikaja (wartosci bliskie zeru). LSTM rozwiazuje to przez trzy bramki kontrolujace przepływ informacji przez czas.</p></div>'+
+'<div class="gate-box gate-f"><h4>Bramka zapominania (forget gate)</h4>'+
+'<p>f(t) = sigma(W_f . [h(t-1), x(t)] + b_f)</p>'+
+'<p style="margin-top:4px">Decyduje co wyrzucic z pamieci dlugookresowej. Wartosci bliskie 0 = zapomnij, bliskie 1 = zachowaj. Przyklad: gdy kurs wraca do normy po szoku, bramka zapomina o ekstremalnej wartosci sprzed kilku tygodni.</p></div>'+
+'<div class="gate-box gate-i"><h4>Bramka wejsciowa (input gate)</h4>'+
+'<p>i(t) = sigma(W_i . [h(t-1), x(t)] + b_i)</p>'+
+'<p style="margin-top:4px">Decyduje co nowego i w jakim stopniu zapisac do pamieci dlugookresowej. Oblicza propozycje nowych wartosci pamieci i filtruje ktore z nich faktycznie wchodza do pamieci. Przyklad: model wykrywa poczatek trendu wzrostowego i zapisuje ten sygnal do pamieci dlugookresowej.</p></div>'+
+'<div class="gate-box gate-o"><h4>Bramka wyjsciowa (output gate)</h4>'+
+'<p>o(t) = sigma(W_o . [h(t-1), x(t)] + b_o)</p>'+
+'<p style="margin-top:4px">Decyduje ktora czesc pamieci dlugookresowej przekazac jako stan ukryty h(t) do nastepnego kroku i do warstwy wyjsciowej. Filtruje to co jest istotne dla biezacej prognozy.</p></div>'+
+'<div class="card"><div class="lbl">Efekt bramek</div>'+
+'<p class="sec">Bramki pozwalaja LSTM wybiórczo pamietac lub zapominac informacje z dowolnie odleglej przeszlosci. Przy SEQ_LEN=30 LSTM moze laczyc dzisiejszy kurs ze zdarzeniem sprzed 25 dni jesli jest dla prognozy istotne.</p></div>'
+},
+
+{t:'Architektura modelu',html:
+'<div class="card"><div class="lbl">Przepływ danych przez LSTMPredictor</div>'+
+'<div class="flow-step fs-in"><h4>Wejscie</h4><p>Ksztalt: <span class="mono">(batch=32, seq_len=30, input_size=1)</span> — 32 przykladow naraz, kazdy to 30 znormalizowanych zwrotow.</p></div>'+
+'<div class="flow-arrow">czyta krok po kroku przez 30 dni &#8595;</div>'+
+'<div class="flow-step fs-lstm"><h4>Warstwa LSTM (hidden_size=32)</h4><p>Na kazdym z 30 krokow uaktualnia pamiec wewnetrzna h przez trzy bramki. Po kroku 30 mamy <span class="mono">out[:, -1, :]</span> — stan pamieci po przeczytaniu calej sekwencji. Ksztalt: <span class="mono">(32, 32)</span>.</p></div>'+
+'<div class="flow-arrow">tylko ostatni krok sekwencji &#8595;</div>'+
+'<div class="flow-step fs-drop"><h4>Dropout (p=0.2)</h4>'+
+'<p>Podczas kazdej iteracji treningu losowo wybiera 20% neuronow i zeruje ich wyjscie. Model nie moze polegac na jednym konkretnym neuronie — musi rozlozyc wiedze rownomiernie. Podczas ewaluacji (<span class="mono">model.eval()</span>) dropout jest wylaczony.</p>'+
+'<p style="margin-top:6px"><strong>Jak dobrac wartosc dropout:</strong> typowy zakres to 0.1–0.5. Przy malym zbiorze danych lub duzym modelu stosuje sie wyzszy dropout (0.3–0.5), przy duzym zbiorze i malym modelu nizszy (0.1–0.2). W praktyce testuje sie kilka wartosci i wybiera te z najnizszym bledem na zbiorze walidacyjnym.</p></div>'+
+'<div class="flow-arrow">32 wartosci pamieci &#8595;</div>'+
+'<div class="flow-step fs-fc"><h4>Warstwa liniowa fc: 32 &#8594; 1</h4>'+
+'<p>Prognoza = w1*h1 + w2*h2 + ... + w32*h32 + b</p>'+
+'<p style="margin-top:6px">h1, h2, ..., h32 to 32 liczby ze stanu pamieci LSTM. Kazda reprezentuje inna informacje ktora siec nauczyla sie wyodrebniac z sekwencji — np. h5 moze kodowac ogolny kierunek trendu, h12 poziom zmiennosci w ostatnich dniach.</p>'+
+'<p style="margin-top:6px">w1, w2, ..., w32 to <strong>wagi</strong> — liczby uczone podczas treningu przez backpropagation. Waga mowi jak bardzo dany element pamieci wplywa na prognozę. Jesli w5 jest duze i dodatnie, wysoka wartosc h5 mocno podwyzsza prognozę. b to wyraz wolny (bias) — przesuniecie prognozy niezalezne od wejsc.</p>'+
+'<p style="margin-top:6px">Waga jest parametrem modelu. Parametr to kazda liczba w modelu ktora jest uczona z danych przez algorytm optymalizacji — w odrozneniu od hiperparametru (np. hidden_size, lr), ktory ustawiamy recznie przed treningiem.</p></div>'+
+'<div class="flow-arrow">&#8595;</div>'+
+'<div class="flow-step fs-out"><h4>Wyjscie</h4><p>Jedna liczba: znormalizowany zwrot. Po denormalizacji i cumprod: prognoza poziomu kursu EUR/PLN.</p></div></div>'+
+'<div class="card"><div class="lbl">Laczna liczba parametrow modelu</div>'+
+'<div class="grid3"><div class="metric"><div class="mlbl">LSTM (4 macierze wag)</div><div class="val">~8 700</div></div>'+
+'<div class="metric"><div class="mlbl">warstwa fc</div><div class="val">33</div></div>'+
+'<div class="metric"><div class="mlbl">razem</div><div class="val">~8 733</div></div></div>'+
+'<p class="sec" style="margin-top:10px">Na 1263 przykladach treningowych mamy okolo 7 obserwacji na parametr. Jako orientacyjna regula: powinno byc co najmniej 10 obserwacji na parametr, zeby model uczyl sie generalnego wzorca a nie pamietal dane na pamiec. Ten model jest na granicy — aby byc w bezpiecznym zakresie nalezy zmniejszyc hidden_size do okolo 15–20 (co daje ~4000 parametrow i proporcje 10:1) lub zwiekszyc zbior treningowy.</p>'+
+'<p class="sec" style="margin-top:8px">Dla porownania: GPT-2 (OpenAI, 2019) — 117 milionow parametrow. GPT-4 (szacunkowo, 2023) — okolo 1.8 biliona parametrow. GPT-4 jest wiec okolo 200 000 razy wiekszy niz nasz model LSTM.</p></div>'
+},
+
+{t:'Trening',html:
+'<div class="card"><div class="lbl">Czym jest epoka (epoch)</div>'+
+'<p class="sec">Epoka to jedno pelne przejscie algorytmu uczacego przez caly zbior treningowy. Mamy 1485 przykladow i batch_size=32, wiec jedna epoka to 47 aktualizacji wag (1485 / 32 = 46.4). Po 60 epokach model zaktualizowal wagi lacznie 2820 razy.</p>'+
+'<p class="sec" style="margin-top:8px">Dlaczego wiele epok? Bo wagi zmieniaja sie malymi krokami (lr=0.001). Jeden przebieg przez dane nie wystarczy — model musi wielokrotnie ogladac te same sekwencje, zeby stopniowo wyregulowac kilka tysiecy parametrow. Analogia: czytasz podrecznik raz i nie pamietasz wszystkiego — dopiero wielokrotne powtorzenia utrwalaja wiedze.</p></div>'+
+'<div class="card"><div class="lbl">Co dzieje sie w jednej epoce — 5 krokow</div>'+
+'<div class="step-row"><div class="circle">1</div><div><h4>Forward pass</h4><p class="sec">Model przyjmuje batch 32 sekwencji i produkuje 32 prognozy znormalizowanych zwrotow. Ksztalt wyjscia: (32, 1).</p></div></div>'+
+'<div class="step-row"><div class="circle">2</div><div><h4>Obliczenie straty MSE</h4><p class="sec">Loss = (1/32) x suma (prognoza - rzeczywisty_zwrot)^2. Im wiekszy blad prognozy, tym wyzsza strata. MSE karze bardziej za duze bledy niz male.</p></div></div>'+
+'<div class="step-row"><div class="circle">3</div><div><h4>Backpropagation through time (BPTT)</h4><p class="sec">Algorytm cofa sie przez wszystkie 30 krokow sekwencji i oblicza gradient straty wzgledem kazdej wagi. Gradient to pochodna — mowi w ktora strone i jak mocno zmienic wage aby strata malala. Im wiekszy gradient, tym silniejsza aktualizacja wagi.</p></div></div>'+
+'<div class="step-row"><div class="circle">4</div><div><h4>Gradient clipping (max_norm=1.0)</h4><p class="sec">Jesli dlugosc wektora gradientu przekracza 1.0, skalujemy go proporcjonalnie zachowujac kierunek. Zapobiega eksplozji gradientow — bez clippingu 30 mnozeni przez macierz wag moze dac gradient rzedu 10 do potegi 5.</p></div></div>'+
+'<div class="step-row"><div class="circle">5</div><div><h4>Aktualizacja wag</h4>'+
+'<p class="sec">waga = waga - lr x gradient, z lr=0.001. W notebooku uzywamy optymalizatora <strong>Adam</strong> — jest to jeden z wielu dostepnych algorytmow. Alternatywy: SGD (najprostszy, wolno zbiega), RMSprop (dobry dla RNN), AdaGrad, AdamW (Adam z silniejsza regularyzacja wag). Adam jest popularny bo adaptuje krok uczenia osobno dla kazdej wagi na podstawie historii gradientow — zbiega szybciej niz SGD i jest mniej wrazliwy na dobor learning rate. Mozna go zmienic w kodzie: <span class="mono">torch.optim.SGD(...)</span> lub <span class="mono">torch.optim.RMSprop(...)</span>.</p></div></div></div>'+
+'<div class="card"><div class="lbl">Krzywa uczenia — strata w kolejnych 60 epokach</div>'+
+'<div class="loss-wrap"><canvas id="loss-canvas" aria-label="Krzywa uczenia LSTM"></canvas></div>'+
+'<div class="grid3" style="margin-top:10px">'+
+'<div class="metric"><div class="mlbl">liczba epok</div><div class="val">60</div></div>'+
+'<div class="metric"><div class="mlbl">batch size</div><div class="val">32</div></div>'+
+'<div class="metric"><div class="mlbl">aktualizacji lacznie</div><div class="val">~2820</div></div></div>'+
+'<p class="sec" style="margin-top:10px">Strata maleje najszybciej w pierwszych 10–15 epokach. Potem plateau — model dostosowal wagi do glownych wzorcow. Na EUR/PLN plateau jest wysokie bo wzorce sekwencyjne sa bardzo slabe — kurs to w przyblizeniu bladzenie losowe.</p></div>'
+},
+
+{t:'Ewaluacja i wnioski',html:
+'<div class="card"><div class="lbl">Prognoza na zbiorze testowym (rok 2024)</div>'+
+'<div class="grid3">'+
+'<div class="metric"><div class="mlbl">LSTM MAE</div><div class="val" style="color:#dc2626">0.056 PLN</div></div>'+
+'<div class="metric"><div class="mlbl">Naiwny MAE</div><div class="val" style="color:#16a34a">0.009 PLN</div></div>'+
+'<div class="metric"><div class="mlbl">LSTM / Naiwny</div><div class="val">6.2x</div></div></div>'+
+'<p class="sec" style="margin-top:10px">LSTM prognozuje zwroty bliskie zeru — to statystycznie optymalna strategia dla I(1). Problem lezy w kumulacji bledow przy rekonstrukcji poziomow przez <span class="mono">np.cumprod</span>: maly blad dzienny (+0.0001) kumuluje sie przez 252 sesje i daje odchylenie poziomow rzedu kilku groszy.</p></div>'+
+'<div class="card"><div class="lbl">Dlaczego LSTM nie jest odpowiedni dla EUR/PLN</div>'+
+'<div class="border-l-red" style="margin-top:6px">'+
+'<h4 style="font-size:13px;font-weight:600;margin-bottom:3px">Brak wzorcow sekwencyjnych</h4>'+
+'<p class="sec">Kurs EUR/PLN to w przyblizeniu bladzenie losowe — kazda zmiana jest niezalezna od poprzednich. LSTM szuka wzorcow sekwencyjnych w danych historycznych, ale na EUR/PLN ich nie ma. Model uczy sie prognozowac zwroty bliskie zeru, co jest poprawne statystycznie, ale nie lepsze niz model naiwny.</p></div>'+
+'<div class="border-l-red">'+
+'<h4 style="font-size:13px;font-weight:600;margin-bottom:3px">Zbyt duza zlozonosc modelu wzgledem liczby obserwacji</h4>'+
+'<p class="sec">Model ma ~8733 parametrow na 1263 przykladach — to okolo 7 obserwacji na parametr. Zalecane minimum to 10 obserwacji na parametr. Przy takiej proporcji model ryzykuje dopasowanie sie do szumu z danych treningowych zamiast generalnego wzorca.</p>'+
+'<p class="sec" style="margin-top:6px">Zeby zachowac bezpieczna proporcje 10:1 na tym zbiorze, nalezy zmniejszyc hidden_size do okolo 15–20 (co daje ~4000–5000 parametrow) lub istotnie zwiekszyc zbior treningowy.</p></div></div>'
+}
+
+];
+
+const titles=pages.map(p=>p.t);
+let cur=0;
+
+function renderNav(){
+  document.getElementById('nav').innerHTML=titles.map((t,i)=>'<button class="nb'+(i===cur?' on':'')+'" onclick="go('+i+')">'+(i+1)+'. '+t+'</button>').join('');
+  document.getElementById('prog').innerHTML=titles.map((_,i)=>'<div class="dot'+(i===cur?' on':'')+'"></div>').join('')+'<span class="pct">'+(cur+1)+' / '+titles.length+'</span>';
+}
+
+function go(i){cur=i;render();}
+
+function render(){
+  renderNav();
+  document.getElementById('body').innerHTML=pages[cur].html;
+  document.getElementById('prv').style.visibility=cur===0?'hidden':'visible';
+  document.getElementById('nxt').style.visibility=cur===titles.length-1?'hidden':'visible';
+  if(cur===5){
+    setTimeout(function(){
+      const c=document.getElementById('loss-canvas');
+      if(!c) return;
+      c.width=c.parentElement.offsetWidth||800;
+      c.height=100;
+      const ctx=c.getContext('2d');
+      const n=60;
+      const pts=Array.from({length:n},function(_,i){return 0.38*Math.exp(-0.09*i)+0.04+Math.sin(i)*0.004;});
+      const mn=Math.min.apply(null,pts),mx=Math.max.apply(null,pts);
+      ctx.clearRect(0,0,c.width,c.height);
+      ctx.strokeStyle='#185FA5';ctx.lineWidth=2;ctx.beginPath();
+      pts.forEach(function(v,i){
+        const x=16+i/(n-1)*(c.width-32);
+        const y=10+(1-(v-mn)/(mx-mn+0.001))*(c.height-20);
+        i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+      });
+      ctx.stroke();
+      ctx.fillStyle='#185FA5';
+      ctx.beginPath();ctx.arc(16,10+(1-(pts[0]-mn)/(mx-mn+0.001))*(c.height-20),4,0,Math.PI*2);ctx.fill();
+      ctx.beginPath();ctx.arc(c.width-16,10+(1-(pts[n-1]-mn)/(mx-mn+0.001))*(c.height-20),4,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle='#888';ctx.font='11px system-ui';
+      ctx.fillText('epoka 1',18,c.height-4);
+      ctx.fillText('epoka 60',c.width-60,c.height-4);
+    },50);
+  }
+}
+
+document.getElementById('prv').addEventListener('click',function(){if(cur>0){cur--;render();}});
+document.getElementById('nxt').addEventListener('click',function(){if(cur<titles.length-1){cur++;render();}});
+render();
+</script>
+</body>
+</html>
